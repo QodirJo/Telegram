@@ -50,7 +50,7 @@ func (p *Processor) handleSTIRNumber(stir string, chatID int) error {
 		return p.tg.SendMessage(chatID, "Malumot xato kiritilgan.")
 	}
 
-	filePath := "/home/qodir/Desktop/Telegram/ex.xlsm" // Update this path
+	filePath := "/home/ubuntu/Telegram/ex.xlsm" // Update this path
 	file, err := xlsx.OpenFile(filePath)
 	if err != nil {
 		return p.tg.SendMessage(chatID, "Error opening the file.")
