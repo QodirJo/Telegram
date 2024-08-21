@@ -79,9 +79,9 @@ func (p *Processor) handleSTIRNumber(stir string, chatID int) error {
 	indexMutex.RLock()
 	defer indexMutex.RUnlock()
 
-	rowData, found := excelIndex[stir]
-	if !found {
-		return p.tg.SendMessage(chatID, "STIR number not found.")
+	rowData, ok := excelIndex[stir]
+	if !ok {
+		return p.tg.SendMessage(chatID, "Malumot topilmadi")
 	}
 
 	orgName := rowData[1]
