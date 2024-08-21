@@ -1,16 +1,16 @@
 package telegram
 
 import (
-	"TelegramBot/events"
-	"TelegramBot/lib/e"
-	storage "TelegramBot/storage"
 	"errors"
 	"fmt"
+	"github.com/tealeg/xlsx"
 	"log"
 	"regexp"
 	"strings"
-
-	"github.com/tealeg/xlsx"
+	"sync"
+	storage "TelegramBot/storage"
+	"TelegramBot/events"
+	"TelegramBot/lib/e"
 )
 
 const (
@@ -19,8 +19,36 @@ const (
 	StartCmd = "/start"
 )
 
-// A map to keep track of user states
-var userStates = make(map[int]bool)
+var (
+	userStates    = make(map[int]bool)
+	excelIndex    = make(map[string][]string)
+	indexMutex    = sync.RWMutex{}
+	excelFilePath = "./ex.xlsm" // Update this path
+)
+
+func init() {
+	go loadExcelData()
+}
+
+func loadExcelData() {
+	file, err := xlsx.OpenFile(excelFilePath)
+	if err != nil {
+		log.Fatalf("Error opening the file: %v", err)
+		return
+	}
+
+	indexMutex.Lock()
+	defer indexMutex.Unlock()
+
+	for _, row := range file.Sheets[0].Rows {
+		stir := row.Cells[0].String()
+		var rowData []string
+		for _, cell := range row.Cells {
+			rowData = append(rowData, cell.String())
+		}
+		excelIndex[stir] = rowData
+	}
+}
 
 func (p *Processor) doCmd(text string, chatID int, username string) error {
 	text = strings.TrimSpace(text)
@@ -40,50 +68,35 @@ func (p *Processor) doCmd(text string, chatID int, username string) error {
 }
 
 func (p *Processor) requestSTIRNumber(chatID int) error {
-	// Request STIR number from user
 	return p.tg.SendMessage(chatID, "Please enter your STIR number (9-digit number):")
 }
 
 func (p *Processor) handleSTIRNumber(stir string, chatID int) error {
-	// Validate if the input is a 9-digit number
 	if matched, _ := regexp.MatchString(`^\d{9}$`, stir); !matched {
 		return p.tg.SendMessage(chatID, "Malumot xato kiritilgan.")
 	}
 
-	filePath := "./ex.xlsm" // Update this path
-	file, err := xlsx.OpenFile(filePath)
-	if err != nil {
-		return p.tg.SendMessage(chatID, "Error opening the file.")
-	}
+	indexMutex.RLock()
+	defer indexMutex.RUnlock()
 
-	sheet := file.Sheets[0]
-	found := false
-	for _, row := range sheet.Rows {
-		cell := row.Cells[0]
-		if cell.String() == stir {
-			found = true
-
-			// Extract data from cells
-			orgName := row.Cells[1].String()  // Adjust index based on your file's column structure
-			oked := row.Cells[2].String()     // Adjust index based on your file's column structure
-			okedName := row.Cells[3].String() // Adjust index based on your file's column structure
-			region := row.Cells[4].String()   // Adjust index based on your file's column structure
-			district := row.Cells[5].String() // Adjust index based on your file's column structure
-
-			response := fmt.Sprintf(
-				"СТИР: %s\nТашкилотингиз номи: %s\nЖойлашган худудингиз: %s\nМанзилингиз: %s\nОКЭД рақами: %s\nОКЭД номи: %s",
-				stir, orgName, region, district, oked, okedName,
-			)
-
-			userStates[chatID] = false // Reset the user state
-			return p.tg.SendMessage(chatID, response)
-		}
-	}
-
+	rowData, found := excelIndex[stir]
 	if !found {
 		return p.tg.SendMessage(chatID, "STIR number not found.")
 	}
-	return nil
+
+	orgName := rowData[1]
+	oked := rowData[2]
+	okedName := rowData[3]
+	region := rowData[4]
+	district := rowData[5]
+
+	response := fmt.Sprintf(
+		"СТИР: %s\nТашкилотингиз номи: %s\nЖойлашган худудингиз: %s\nМанзилингиз: %s\nОКЭД рақами: %s\nОКЭД номи: %s",
+		stir, orgName, region, district, oked, okedName,
+	)
+
+	userStates[chatID] = false // Reset the user state
+	return p.tg.SendMessage(chatID, response)
 }
 
 func (p *Processor) ProcessMessage(event events.Event) error {
@@ -93,16 +106,13 @@ func (p *Processor) ProcessMessage(event events.Event) error {
 	}
 
 	if userStates[meta.ChatId] {
-		// If waiting for STIR number, handle it
 		return p.handleSTIRNumber(event.Text, meta.ChatId)
 	}
 
 	if event.Text == StartCmd {
-		// If the command is /start, handle it accordingly
 		return p.doCmd(event.Text, meta.ChatId, meta.UserName)
 	}
 
-	// If not a known command, treat it as STIR number
 	return p.handleSTIRNumber(event.Text, meta.ChatId)
 }
 
