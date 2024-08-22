@@ -20,4 +20,4 @@ RUN go build .
 EXPOSE 8080
 
 # Command to run the executable
-CMD ["./TelegramBot", "-tg-bot-token=7439680908:AAEHRuKIaQpPSPnOPKA58hs4X5r1scTBEX8"]
+CMD ["./TelegramBot", "-tg-bot-token", "7439680908:AAEHRuKIaQpPSPnOPKA58hs4X5r1scTBEX8"]
